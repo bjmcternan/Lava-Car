@@ -29,6 +29,18 @@
 #define RIGHTTHRESH 730
 #define ENCODERCHECK 720
 #define ENCODERTHRESH 60
+#define DEFAULTBAUD 9600
+#define NUNCHUKPRESENT 694
+#define MAXRANGE 510
+#define STARTRANGE 255
+#define BEGINDEADZONE 50
+#define ENDDEADZONE -50
+#define BEGINMOTORDEADZONE 50
+#define ENDMOTORDEADZONE -50
+#define MAXSPEED 255
+#define MINSPEED -255
+#define LEFTTURNSPEED 120
+#define RIGHTTURNSPEED 120
 ////////////////////////
 
 //Initialize
@@ -37,8 +49,6 @@ Bricktronics brick = Bricktronics();
 Motor m1 = Motor(&brick, 1);
 Motor m2 = Motor(&brick, 2);
 ColorSensor color = ColorSensor(&brick,3);
-
-//Button b= Button(&brick,1); //Was used for testing
 
 double speedY = 0;
 double speedX = 0;
@@ -55,48 +65,47 @@ int rEncoder = 0;
 boolean nunchukPresent = false;
 
 //Begin serial connection and initialize the motors and sensors
+//setup() must be named setup() and is initially called by the Arduino system
 void setup()
 {
-  Serial.begin(9600);
-  brick.begin();
-  m1.begin();
-  m2.begin();
-  color.begin();
-  //b.begin();
-  nunchuk.init();
-  if(analogRead(A5) == 694) //Detects if the Wii Nunchuk is present
+  Serial.begin(DEFAULTBAUD);						//setup debug communication
+  brick.begin();												//Initialize bricktronics shield, interface between lego system and Arduino
+  m1.begin();														//Initialize motor 1
+  m2.begin();														//Initialize motor 2
+  color.begin();												//Initialize the color sensor
+  nunchuk.init();												//Initialize the Wii Nunchuk
+  if(analogRead(A5) == NUNCHUKPRESENT)  //Detects if the Wii Nunchuk is present
   {
-    nunchukPresent = true; //
+    nunchukPresent = true; 
   }
   Serial.println(analogRead(A5));
 }
 
-
+//loop() must be called loop and is the main cycle of the Arduino system
 void loop()
 {
-  int new_color = color.get_color(); 
+  int new_color = color.get_color();		//Read color sensor
   if(nunchukPresent)
   {
     Serial.println("In Normal");
-    normal(new_color);
+    operateNormal(new_color);
   }
   else
   {
     Serial.println("In auto");
-    automatic(new_color);
+    operateAutomatic(new_color);
   }
 
   Serial.println("***");
-  delay(1);
+  delay(1);															//Allows Arduino to work
 }
 
+//getForwardSpeed(nunchukY) calculates forward speed based on y axis tilt of nunchuk
 int getForwardSpeed(double nunchukY)
 {
-  if((nunchukY > HIGHFTHRESH)||(nunchukY < LOWFTHRESH))
+  if((nunchukY >= LOWFTHRESH)&&(nunchukY <= HIGHFTHRESH))
   {
-  }
-  else
-  {
+    //Dynamically adjust thresholds 
     if(nunchukY < lowBound)
     {
       lowBound = nunchukY;
@@ -107,24 +116,15 @@ int getForwardSpeed(double nunchukY)
       highBound = nunchukY;
     }
   }
-  /*if(hold == 1)
-  {
-    return 0;
-  }
-  else
-  {*/
-    return (((nunchukY-lowBound)/(highBound - lowBound))*510)-255;
-  //}
+  return (((nunchukY-lowBound)/(highBound - lowBound))*MAXRANGE)-STARTRANGE;
 }
 
+//getTurnSpeed(nunchukX) calculate turn from left or right tilt of Nunchuk
 int getTurnSpeed(double nunchukX)
 {
-  if((nunchukX > RIGHTTHRESH)||(nunchukX < LEFTTHRESH))
+  if((nunchukX >= LEFTTHRESH)&&(nunchukX <= RIGHTTHRESH))
   {
-    //return speedX;
-  }
-  else
-  {
+    //Dynamically adjust thresholds 
     if(nunchukX < leftBound)
     {
       leftBound = nunchukX;
@@ -135,146 +135,105 @@ int getTurnSpeed(double nunchukX)
       rightBound = nunchukX;
     }
   }
-  /*if(hold == 1)
-  {
-    return 0;
-  }
-  else
-  {*/
-    return (((nunchukX-leftBound)/(rightBound - leftBound))*510)-255;
-  //}
+  return (((nunchukX-leftBound)/(rightBound - leftBound))*MAXRANGE)-STARTRANGE;
 }
 
-void normal(int new_color) //Wii Nunchuk is present and will be controller by the user
+void operateNormal(int new_color) 				//Wii Nunchuk is present and will be controller by the user
 {
-  nunchuk.update();
+  nunchuk.update();												//Read nunchuk data
   nunchukY = nunchuk.accelY;
   nunchukX = nunchuk.accelX;
-  if(new_color != WHITE)
+  if(new_color != WHITE)									//If no longer over white floor then stop
   {
     m1.set_speed(0);
     m2.set_speed(0);
   }
   else
   {
-  if(((speedX < 50)&&(speedX > -50))) 
-  {
-    speedX = 0;
-  }
-  
-  speedY = getForwardSpeed(nunchukY);
-  speedX = getTurnSpeed(nunchukX);
-  
-  if(speedY >= 0) 
-  {
-    if(speedX >= 0)
-    {
-      speedR = speedY + (-1 * speedX);
-      speedL = speedY;
-    }
-    else
-    {
-      speedR = speedY;
-      speedL = speedY + (speedX);
-    }
-  }
-  else
-  {
-    if(speedX >= 0)
-    {
-      speedR = speedY + (-1 * speedX);
-      speedL = speedY;
-    }
-    else
-    {
-      speedR = speedY;
-      speedL = speedY + (speedX);
-    }
-  }
- 
-  /* if(b.is_pressed()) //Used for testing
-  {
-  hold *= -1;
-  
-  }
-  */
- 
-  /*if(((speed < 40)&&(speed > -45)) || (new_color != RED)) //Used for testing
-  {
-    speed = 0;
-    nunchuk.init();
-    
-  }
-  previousNunchukY = nunchukY;
-  */
-  
-  //Cap the speed of the motors
-  if(speedL > 255)
-  {
-    speedL = 255;
-  }
-  else if (speedL < -255)
-  {
-    speedL = -255;
-  }
-  
-  if(speedR > 255)
-  {
-    speedR = 255;
-  }
-  else if (speedR < -255)
-  {
-    speedR = -255;
-  }
-  
-  if(((speedL < 50)&&(speedL > -50))) // Minimum Speed
-  {
-    speedL = 0;
-  }
-  
-  if(((speedR < 50)&&(speedR > -50))) // Minimum Speed
-  {
-    speedR = 0;
-  }
-  
-  m1.set_speed(speedL);
-  m2.set_speed(speedR);
-  }
+		//Define deadzone for controller
+		if(((speedX < BEGINDEADZONE)&&(speedX > ENDDEADZONE))) 
+		{
+			speedX = 0;
+		}
+
+		speedY = getForwardSpeed(nunchukY);
+		speedX = getTurnSpeed(nunchukX);
+
+		//If making right turn adjust right wheel speed
+		//If making left turn adjust left wheel speed
+		if(speedX >= 0)
+		{
+			speedR = speedY + (-1 * speedX);
+			speedL = speedY;
+		}
+		else
+		{
+			speedR = speedY;
+			speedL = speedY + (speedX);
+		}
+
+		//Cap the speed of the motors
+		if(speedL > MAXSPEED)
+		{
+			speedL = MAXSPEED;
+		}
+		else if (speedL < MINSPEED)
+		{
+			speedL = MINSPEED;
+		}
+
+		if(speedR > MAXSPEED)
+		{
+			speedR = MAXSPEED;
+		}
+		else if (speedR < MINSPEED)
+		{
+			speedR = MINSPEED;
+		}
+
+		if(((speedL < BEGINMOTORDEADZONE)&&(speedL > ENDMOTORDEADZONE))) // Minimum Speed
+		{
+			speedL = 0;
+		}
+
+		if(((speedR < BEGINMOTORDEADZONE)&&(speedR > ENDMOTORDEADZONE))) // Minimum Speed
+		{
+			speedR = 0;
+		}
+
+		m1.set_speed(speedL);
+		m2.set_speed(speedR);
+	}
 }
 
-void automatic(int new_color) //No Wii Nunchik, vehicle will move on its own
+void operateAutomatic(int new_color) 						//No Wii Nunchik, vehicle will move on its own
 {
-  if (new_color == GREEN)
+  if (new_color == GREEN)												//GREEN is the color of the goal. Goal reached, stop motors.
   {
     speedL = 0;
     speedR = 0;
   }
   else 
   {
-    if (new_color == BLUE)    //blue on the left side, turn right a little
+    if (new_color == BLUE)    									//blue on the left side, turn right a little
     {
-      speedL = 120;
+      speedL = LEFTTURNSPEED;
       speedR = 0; 
       delay(10);
     }
-    else if(new_color == YELLOW)   //yellow on the right side, turn left a little
+    else if(new_color == YELLOW)  							//yellow on the right side, turn left a little
     {
       speedL = 0;
-      speedR = 120;   
+      speedR = RIGHTTURNSPEED;   
       delay(10);   
     }
     else
     {
-      speedL = 120;
-      speedR = 120;
+      speedL = LEFTTURNSPEED;
+      speedR = RIGHTTURNSPEED;
     }
-    /*else if(new_color == GREEN)
-    {
-      speedL=0;
-      speedR=0;
-    }*/
   }
-    delay(1);
-    m1.set_speed(speedL);    // half speed
-    m2.set_speed(speedR);    // half speed
+    delay(1);									//Allow Arduino to work
+    m1.set_speed(speedL);     // half speed
+    m2.set_speed(speedR);     // half speed
 }
